@@ -2,6 +2,12 @@
 
 set -eu
 
+if [ "${GUEST_SESSION:-}" = 'true' ]; then
+  exit 0
+fi
+
+mode=${1:-}
+
 puavo_domain=$(cat /etc/puavo/domain)
 puavo_hosttype=$(cat /etc/puavo/hosttype)
 
@@ -98,25 +104,35 @@ done
 # handle links from user home directory to gvfs-mounts for applications
 # that do not understand gvfs
 
-# remove stale links (maybe created later)
-for linkname in 'Yhteiset'     'Delade filer' 'Share' \
-                'Verkkokansio' 'Nätverksmapp' 'Network folder'; do
-  [ -h ~/"$linkname" ] && rm -f ~/"$linkname"
-done
+if [ "$mode" = '--with-cleanups' ]; then
+  # remove stale links (maybe created later)
+  for linkname in 'Yhteiset'     'Delade filer' 'Share' \
+                  'Verkkokansio' 'Nätverksmapp' 'Network folder'; do
+    [ -h ~/"$linkname" ] && rm -f ~/"$linkname"
+  done
+
+  case "$puavo_hosttype" in
+    fatclient|ltspserver)
+      if ! use_sambahomes; then
+        # old stuff, remove
+        rmdir ~/.puavo-sharedir.schooldir 2>/dev/null || true
+      fi
+      ;;
+    laptop)
+      # old stuff, remove
+      rmdir ~/.puavo-sharedir.schooldir \
+            ~/.puavo-sharedir.userdir 2>/dev/null || true
+      ;;
+  esac
+fi
 
 case "$puavo_hosttype" in
   fatclient|ltspserver)
     if use_sambahomes; then
-      ln -ns ~/.puavo-sharedir.schooldir ~/"${schooldir_displayname}" || true
+      ln -fns ~/.puavo-sharedir.schooldir ~/"${schooldir_displayname}"
     else
-      rmdir ~/.puavo-sharedir.schooldir 2>/dev/null || true
-      ln -ns "/home/share/${sharename}/${user_primary_group}" \
-             ~/"${schooldir_displayname}" || true
+      ln -fns "/home/share/${sharename}/${user_primary_group}" \
+              ~/"${schooldir_displayname}"
     fi
-    ;;
-  laptop)
-    # old stuff, remove
-    rmdir ~/.puavo-sharedir.schooldir \
-          ~/.puavo-sharedir.userdir 2>/dev/null || true
     ;;
 esac
