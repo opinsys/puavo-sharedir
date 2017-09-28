@@ -9,11 +9,9 @@ fi
 mode=${1:-}
 
 puavo_domain=$(cat /etc/puavo/domain)
+puavo_hosttype=$(cat /etc/puavo/hosttype)
 
 user_primary_group=$(id -gn)
-
-is_remotemounts_enabled=$(puavo-conf puavo.mounts.by_user_from_bootserver.enabled)
-is_nethomes_enabled=$(puavo-conf puavo.mounts.nethomes.enabled)
 
 filter_out_our_bookmarks() {
   local bookmarksfile
@@ -50,18 +48,19 @@ update_bookmarks() {
 
   filter_out_our_bookmarks "${bookmarksfile}" > "${tmpfile}"
 
-  if [ "${is_nethomes_enabled}" = 'true' ]; then
-    echo "file:///home/share/${sharename}/${user_primary_group} ${schooldir_displayname}" >> "${tmpfile}"
-  fi
-
-  if [ "${is_remotemounts_enabled}" = 'true' ]; then
+  case "$puavo_hosttype" in
+    fatclient|ltspserver)
+      echo "file:///home/share/${sharename}/${user_primary_group} ${schooldir_displayname}" >> "${tmpfile}"
+      ;;
+    laptop)
       remote_host=$(dig SRV "_sambaserver._tcp.${puavo_domain}" +short \
           | sed -r -n 's/^[0-9]+ [0-9]+ 139 (.*)\./\1/p' | head -n1)
       if [ -n "${remote_host}" ]; then
           echo "smb://${remote_host}/${USER} ${userdir_displayname}"
           echo "smb://${remote_host}/share/${sharename}/${user_primary_group} ${schooldir_displayname}"
       fi >>"${tmpfile}"
-  fi
+      ;;
+  esac
 
   mv "${tmpfile}" "${bookmarksfile}"
 }
@@ -107,7 +106,9 @@ if [ "$mode" = '--with-cleanups' ]; then
   done
 fi
 
-if [ "${is_nethomes_enabled}" = 'true' ]; then
-  ln -fns "/home/share/${sharename}/${user_primary_group}" \
-          ~/"${schooldir_displayname}"
-fi
+case "$puavo_hosttype" in
+  fatclient|ltspserver)
+    ln -fns "/home/share/${sharename}/${user_primary_group}" \
+            ~/"${schooldir_displayname}"
+    ;;
+esac

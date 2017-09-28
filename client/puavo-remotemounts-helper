@@ -1,19 +1,21 @@
-#!/usr/bin/ruby
+#!/usr/bin/ruby1.9.1
 # encoding: UTF-8
+
+puavo_hosttype = IO.read('/etc/puavo/hosttype').chomp
+if puavo_hosttype != 'laptop' then
+  exit(0)
+end
 
 exit(0) if ENV['GUEST_SESSION'] == 'true'
 
-require 'puavo/conf'
-
-puavoconf = Puavo::Conf.new
-exit(0) unless puavoconf.get('puavo.mounts.by_user_from_bootserver.enabled') == 'true'
-
 require 'dbus'
 require 'fileutils'
+require 'json'
 require 'open3'
 require 'resolv'
 require 'thread'
 
+@device = JSON.parse( IO.read('/etc/puavo/device.json') )
 $puavo_domain = IO.read('/etc/puavo/domain').chomp
 
 $update_gtk_bookmarks_semaphore = Mutex.new
@@ -24,6 +26,17 @@ end
 
 def errmsg(msg); sendmsg(STDERR, msg); end
 def outmsg(msg); sendmsg(STDOUT, msg); end
+
+def has_device_tag(tag)
+  (@device['tags'] || []).include?(tag)
+end
+
+def use_remotemounts
+  # Doing the remote mounts is the default,
+  # "no_use_remotemounts"-tag will disable that,
+  # but then again "use_remotemounts"-tag overrides it.
+  ! has_device_tag('no_use_remotemounts') || has_device_tag('use_remotemounts')
+end
 
 class DbusHandler
   def initialize(gvfs_mounts)
@@ -286,6 +299,11 @@ def get_our_gvfsmounts
                   user_id,
                   schooldir_label)
   ]
+end
+
+if !use_remotemounts then
+  # Tags suggest we should do nothing.
+  exit(0)
 end
 
 # ensure mounts to remote directories come up and stay
